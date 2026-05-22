@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+  <title>Pizza Burg - AR Menu</title>
+
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-color: #fdf3da;
+      --surface-color: #ffffff;
+      --primary: #d92b2b;
+      --secondary: #ffc107;
+      --text-main: #1a1a1a;
+      --text-muted: #666666;
+      --border-color: rgba(0,0,0,0.08);
+      --font-display: 'Anton', sans-serif;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%; height: 100%; font-family: var(--font-body);
+      background: var(--bg-color); color: var(--text-main); overflow-x: hidden;
+    }
+
+    .app-container { display: flex; flex-direction: column; min-height: 100vh; padding-bottom: 80px; }
+
+    header { background: white; box-shadow: 0 4px 15px rgba(0,0,0,0.05); position: sticky; top: 0; z-index: 5; }
+    .header-top { background: var(--primary); color: white; padding: 8px 20px; display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+    .header-main { padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+    .logo-placeholder { width: 80px; height: 80px; background: var(--bg-color); border: 2px dashed #ccc; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #999; font-size: 12px; }
+    .brand-title { font-family: var(--font-display); font-size: 38px; letter-spacing: 1px; line-height: 1; color: var(--text-main); -webkit-text-stroke: 1px black; }
+    .tagline { font-weight: 700; font-size: 15px; color: var(--primary); }
+
+    .hero { background: /*linear-gradient(135deg, #d92b2b 0%, #a81c1c 100%),*/ url(/Files/banner.png) ;  background-size: 50% 100%; color: white; padding: 40px 20px; text-align: center; position: relative; margin-bottom: 20px; }
+    .hero h2 { font-size: 24px; margin-bottom: 10px; position: relative; z-index: 1; }
+    .hero p { position: relative; z-index: 1; }
+
+    .categories { display: flex; gap: 12px; padding: 0 20px 20px; overflow-x: auto; scrollbar-width: none; }
+    .categories::-webkit-scrollbar { display: none; }
+    .category-btn { background: white; color: var(--text-main); border: 2px solid var(--border-color); border-radius: 999px; padding: 10px 24px; font-size: 16px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: var(--font-display); letter-spacing: 0.5px; }
+    .category-btn.active { background: var(--secondary); border-color: var(--secondary); box-shadow: 0 4px 10px rgba(255, 193, 7, 0.4); }
+
+    .menu-list { padding: 0 20px; display: flex; flex-direction: column; gap: 16px; }
+    .menu-item { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border: 1px solid var(--border-color); }
+    .menu-item-header { padding: 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+    .menu-item-info h3 { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+    .menu-item-info p { font-size: 14px; color: var(--text-muted); font-weight: 600; line-height: 1.4; }
+    .expand-icon { font-size: 20px; color: var(--primary); font-weight: 800; transition: transform 0.3s; }
+    .menu-item.expanded .expand-icon { transform: rotate(180deg); }
+    
+    .subitems-container { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; background: #fafafa; }
+    .menu-item.expanded .subitems-container { max-height: 1000px; }
+    
+    .subitem { padding: 16px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+    .subitem-info h4 { font-size: 16px; font-weight: 700; }
+    .subitem-info .price { font-size: 15px; color: var(--primary); font-weight: 800; margin-top: 2px; }
+    
+    .actions { display: flex; gap: 8px; }
+    .btn { border: none; border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .btn-3d { background: #eee; color: var(--text-main); }
+    .btn-add { background: var(--primary); color: white; }
+
+    footer { background: white; padding: 40px 20px; margin-top: 40px; text-align: center; border-top: 1px solid var(--border-color); }
+    .footer-placeholder { width: 100%; padding: 20px; border: 2px dashed #ccc; background: #fafafa; color: #999; font-size: 14px; border-radius: 12px; margin-bottom: 20px; font-weight: 600;}
+
+    /* === FLOATING CART BTN === */
+    .floating-cart-btn { position: fixed; bottom: 20px; right: 20px; background: var(--secondary); color: var(--text-main); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(255,193,7,0.5); cursor: pointer; z-index: 100; border: none; }
+    .cart-badge { position: absolute; top: -5px; right: -5px; background: var(--primary); color: white; width: 24px; height: 24px; border-radius: 50%; font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+
+    /* === CART SIDEBAR === */
+    .cart-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150; display: none; opacity: 0; transition: opacity 0.3s; }
+    .cart-overlay.active { display: block; opacity: 1; }
+    .cart-sidebar { position: fixed; top: 0; right: -100%; width: 100%; max-width: 400px; height: 100%; height: 100dvh; background: white; z-index: 200; box-shadow: -4px 0 15px rgba(0,0,0,0.1); transition: right 0.3s; display: flex; flex-direction: column; }
+    .cart-sidebar.active { right: 0; }
+    
+    .cart-header { padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+    .cart-header h2 { font-size: 20px; font-weight: 800; }
+    .close-cart { background: none; border: none; font-size: 24px; cursor: pointer; }
+    
+    .cart-items { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+    .cart-item { background: #fafafa; border: 1px solid var(--border-color); border-radius: 12px; padding: 15px; }
+    .cart-item-header { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 5px; }
+    .cart-item-addons { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
+    .cart-item-footer { display: flex; justify-content: space-between; align-items: center; }
+    .cart-item-price { color: var(--primary); font-weight: 800; }
+    .remove-btn { color: #d92b2b; background: rgba(217,43,43,0.1); border: none; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; }
+
+    .cart-footer { padding: 20px; border-top: 1px solid var(--border-color); background: white; }
+    .cart-total-row { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; margin-bottom: 15px; }
+
+    /* === ADDON MODAL === */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 300; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .modal-overlay.active { display: flex; }
+    .modal-content { background: white; width: 100%; max-width: 400px; border-radius: 20px; overflow: hidden; display: flex; flex-direction: column; max-height: 80vh; }
+    .modal-header { padding: 20px; background: var(--secondary); font-weight: 800; display: flex; justify-content: space-between; }
+    .modal-body { padding: 20px; overflow-y: auto; }
+    .addon-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-color); }
+    .addon-row label { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; flex: 1; }
+    .addon-price { color: var(--primary); font-weight: 700; }
+    .modal-footer { padding: 20px; border-top: 1px solid var(--border-color); }
+    .confirm-addon-btn { width: 100%; background: var(--primary); color: white; border: none; padding: 14px; border-radius: 10px; font-weight: 800; font-size: 16px; cursor: pointer; }
+
+    /* === VIEWER CARD === */
+    .viewer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 50; display: none; opacity: 0; transition: opacity 0.3s ease; align-items: flex-end; }
+    .viewer-overlay.active { display: flex; opacity: 1; }
+    
+    .viewer-card { width: 100%; background: white; border-radius: 30px 30px 0 0; padding: 24px; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; flex-direction: column; }
+    .viewer-overlay.active .viewer-card { transform: translateY(0); }
+    
+    .viewer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .viewer-title h2 { font-size: 22px; font-weight: 800; }
+    .viewer-title .viewer-price { color: var(--primary); font-weight: 600; font-size: 16px; margin-top: 4px; }
+    
+    .close-viewer { background: #eee; border: none; color: var(--text-main); width: 36px; height: 36px; border-radius: 50%; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold;}
+    
+    model-viewer { width: 100%; height: 30vh; min-height: 250px; background: transparent; outline: none; border-radius: 20px; }
+    
+    .launch-btn { margin-top: 24px; background: var(--primary); color: white; border: none; border-radius: 16px; padding: 18px; font-size: 16px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; box-shadow: 0 8px 20px rgba(217, 43, 43, 0.3); }
+
+    /* === AR OVERLAY === */
+    #overlay { position: fixed; inset: 0; z-index: 9999; display: none; }
+    #overlay.active { display: block; }
+    
+    #xr-canvas { width: 100%; height: 100%; touch-action: none; position: absolute; top: 0; left: 0; z-index: -1; }
+    
+    .hint { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); color: white; padding: 14px 24px; border-radius: 999px; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    
+    .place-btn { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; border: none; border-radius: 999px; padding: 16px 32px; font-size: 16px; font-weight: 600; box-shadow: 0 4px 15px rgba(255, 107, 53, 0.5); opacity: 0; pointer-events: none; transition: 0.3s; }
+    .place-btn.ready { opacity: 1; pointer-events: auto; }
+    
+    .close-ar-btn { position: absolute; top: 40px; right: 20px; width: 46px; height: 46px; border-radius: 50%; border: none; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); color: white; font-size: 20px; cursor: pointer; }
+    
+    .controls { position: absolute; right: 20px; bottom: 60px; display: flex; flex-direction: column; gap: 12px; opacity: 0; pointer-events: none; transition: 0.3s; }
+    .controls.visible { opacity: 1; pointer-events: auto; }
+    .controls button { width: 50px; height: 50px; border-radius: 50%; border: none; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); color: white; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  </style>
+</head>
+
+<body>
+
+  <div class="app-container">
+    <header>
+      <div class="header-top">
+        <span>Delivery: +8801316411560</span>
+        <span>Complain: +8801303695621</span>
+      </div>
+      <div class="header-main">
+        <div class="logo-placeholder">
+          <img src="/Files/logo.jpg" alt="" width="90" height="90">
+        </div>
+        <div class="brand-title">PIZZA BURG</div>
+        <div class="tagline">Beware Pizza Burg is Addictive!</div>
+      </div>
+    </header>
+
+    <div class="hero">
+      <div class="hero-content">
+        <h2>Interactive AR Menu</h2>
+        <p>Order delicious food & preview it in 3D!</p>
+      </div>
+    </div>
+
+    <div class="categories" id="category-container"></div>
+    <div class="menu-list" id="menu-container"></div>
+    
+    <footer>
+      <div class="footer-placeholder">Insert Location / Map Here</div>
+      <div class="footer-placeholder">Insert Social Media Links Here</div>
+      <p style="font-size: 13px; color: var(--text-muted); font-weight: 600;">© 2026 Pizza Burg.</p>
+    </footer>
+  </div>
+
+  <!-- FLOATING CART -->
+  <button class="floating-cart-btn" onclick="toggleCart()">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+    <div class="cart-badge" id="cart-badge">0</div>
+  </button>
+
+  <!-- CART SIDEBAR -->
+  <div class="cart-overlay" id="cart-overlay" onclick="toggleCart()"></div>
+  <div class="cart-sidebar" id="cart-sidebar">
+    <div class="cart-header">
+      <h2>Your Order</h2>
+      <button class="close-cart" onclick="toggleCart()">✕</button>
+    </div>
+    <div class="cart-items" id="cart-items"></div>
+    <div class="cart-footer">
+      <div class="cart-total-row">
+        <span>Total:</span>
+        <span id="cart-total">৳ 0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADDON MODAL -->
+  <div class="modal-overlay" id="addon-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="addon-modal-title">Customize Item</span>
+        <button class="close-cart" style="font-size:18px" onclick="closeAddonModal()">✕</button>
+      </div>
+      <div class="modal-body" id="addon-modal-body"></div>
+      <div class="modal-footer">
+        <button class="confirm-addon-btn" id="confirm-addon-btn" onclick="confirmAddonSelection()">Add to Cart - ৳0</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEWER CARD -->
+  <div class="viewer-overlay" id="viewer-overlay">
+    <div class="viewer-card">
+      <div class="viewer-header">
+        <div class="viewer-title">
+          <h2 id="viewer-name">Item Name</h2>
+          <div class="viewer-price" id="viewer-price">৳0</div>
+        </div>
+        <button class="close-viewer" onclick="closeViewer()">✕</button>
+      </div>
+      
+      <model-viewer id="mv" src="" camera-controls auto-rotate shadow-intensity="1" exposure="1" environment-image="neutral"></model-viewer>
+
+      <button class="launch-btn" onclick="launchAR()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+        View in AR
+      </button>
+    </div>
+  </div>
+
+  <!-- CUSTOM AR OVERLAY -->
+  <div id="overlay">
+    <canvas id="xr-canvas"></canvas>
+    <button class="close-ar-btn" onclick="stopAR()">✕</button>
+    <div class="hint" id="hint">Move phone slowly to detect surface...</div>
+    <button class="place-btn" id="place-btn">Place Dish</button>
+    
+    <div class="controls" id="controls">
+      <button onclick="scaleModel(1.1)">+</button>
+      <button onclick="scaleModel(0.9)">−</button>
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================
+       DATA STRUCTURE
+    ========================================================= */
+    const addOnsConfig = {
+      pizza: [
+        { name: "Sausage Crust", price: 99 },
+        { name: "Cheese Injection", price: 149 },
+        { name: "Topping Thunder", price: 99 }
+      ],
+      burger: [
+        { name: "More sauce/Naga", price: 20 },
+        { name: "More Cheese", price: 35 },
+        { name: "More Mushroom", price: 35 },
+        { name: "More Sausage", price: 40 }
+      ],
+      setMenu: [
+        { name: "More Rice", price: 35 },
+        { name: "More Veg", price: 39 },
+        { name: "More Chicken Chili", price: 79 },
+        { name: "More Red Chili", price: 79 }
+      ]
+    };
+
+    const menuData = [
+      {
+        category: "PIZZA TOPPING", addonType: "pizza",
+        items: [
+          { 
+            name: "8. BBQ Meat Machine", 
+            desc: "Juicy, Too juicy, Best!!", 
+            model: "models/pizza.glb", // Define model here to show a single 3D button on the main header
+            scale: 0.35, 
+            subitems: [{ name: "Small", price: 315 }, { name: "Medium", price: 410 }, { name: "Large", price: 605 }, { name: "Family", price: 1015 }] 
+          },
+          
+          { name: "6. Kebab Cocktail",
+           desc: "5 types of chicken, Kebab spice", 
+            model: "models/pizza.glb", // Define model here to show a single 3D button on the main header
+            scale: 0.35, 
+           subitems: [{ name: "Small", price: 325, model: "models/pizza.glb", scale: 0.25 }, { name: "Medium", price: 445, model: "models/pizza.glb", scale: 0.3 }, { name: "Large", price: 635, model: "models/pizza.glb", scale: 0.35 }, { name: "Family", price: 1155, model: "models/pizza.glb", scale: 0.4 }] 
+          },
+          { name: "9. Meat Masala", desc: "Lots of Meat, Spice", subitems: [{ name: "Small", price: 315, model: "models/pizza.glb", scale: 0.25 }, { name: "Medium", price: 415, model: "models/pizza.glb", scale: 0.3 }, { name: "Large", price: 605, model: "models/pizza.glb", scale: 0.35 }, { name: "Family", price: 1015, model: "models/pizza.glb", scale: 0.4 }] },
+          { name: "7. Sausage Carnival", desc: "Big Big sausage, Mushroom", subitems: [{ name: "Small", price: 315, model: "models/pizza.glb", scale: 0.25 }, { name: "Medium", price: 415, model: "models/pizza.glb", scale: 0.3 }, { name: "Large", price: 605, model: "models/pizza.glb", scale: 0.35 }, { name: "Family", price: 1015, model: "models/pizza.glb", scale: 0.4 }] },
+          { name: "2. Meaty Onion", desc: "Onion, Meat, Sausage, Spice", subitems: [{ name: "Small", price: 255, model: "models/pizza.glb", scale: 0.25 }, { name: "Medium", price: 375, model: "models/pizza.glb", scale: 0.3 }, { name: "Large", price: 575, model: "models/pizza.glb", scale: 0.35 }, { name: "Family", price: 865, model: "models/pizza.glb", scale: 0.4 }] }
+        ]
+      },
+      {
+        category: "PIZZA MIX & CHEESE", addonType: "pizza",
+        items: [
+          { name: "12. THE EVERYTHING", desc: "For the 1st timer.", subitems: [{ name: "Large", price: 649, model: "models/pizza.glb", scale: 0.35 }, { name: "Family", price: 1189, model: "models/pizza.glb", scale: 0.4 }] },
+          { name: "11. Four Flavour", desc: "Name says it all", subitems: [{ name: "Small", price: 325, model: "models/pizza.glb", scale: 0.25 }, { name: "Medium", price: 425, model: "models/pizza.glb", scale: 0.3 }, { name: "Large", price: 615, model: "models/pizza.glb", scale: 0.35 }, { name: "Family", price: 1095, model: "models/pizza.glb", scale: 0.4 }] },
+          { name: "13. Mac and Cheese", desc: "Pasta, Mixed Cheese, Corn", subitems: [{ name: "Small", price: 315, model: "models/pizza.glb", scale: 0.25 }, { name: "Medium", price: 435, model: "models/pizza.glb", scale: 0.3 }, { name: "Large", price: 625, model: "models/pizza.glb", scale: 0.35 }, { name: "Family", price: 1125, model: "models/pizza.glb", scale: 0.4 }] }
+        ]
+      },
+      {
+        category: "BURGER", addonType: "burger",
+        items: [
+          { name: "7. JUICY BOMB", desc: "Explosion of flavors", subitems: [{ name: "Chicken", price: 199, model: "models/burger.glb", scale: 0.15 }, { name: "Beef", price: 220, model: "models/burger.glb", scale: 0.16 }] },
+          { name: "8. BBQ", desc: "Smoky BBQ Sauce", subitems: [{ name: "Chicken", price: 219, model: "models/burger.glb", scale: 0.15 }, { name: "Beef", price: 250, model: "models/burger.glb", scale: 0.16 }] },
+          { name: "9. TONGUE SLAYER", desc: "Spicy & Tangy", subitems: [{ name: "Chicken", price: 219, model: "models/burger.glb", scale: 0.15 }, { name: "Beef", price: 260, model: "models/burger.glb", scale: 0.16 }] },
+          { name: "10. CHEESE VOLCANO", desc: "Overflowing with cheese", subitems: [{ name: "Chicken", price: 259, model: "models/burger.glb", scale: 0.15 }, { name: "Beef", price: 270, model: "models/burger.glb", scale: 0.16 }] }
+        ]
+      },
+      {
+        category: "SET MENU", addonType: "setMenu",
+        items: [
+          { name: "SET MENU-1", desc: "Mild spicy rice, Red chili chicken, shish kebab...", subitems: [{ name: "Standard", price: 199, model: "models/burger.glb", scale: 0.25 }] },
+          { name: "SET MENU-2", desc: "Mild spicy rice, Creamed chicken steak...", subitems: [{ name: "Standard", price: 279, model: "models/burger.glb", scale: 0.25 }] },
+          { name: "FAT BOY MEAL", desc: "Mild spicy rice, Chicken lollipop 3 pcs...", subitems: [{ name: "Standard", price: 319, model: "models/burger.glb", scale: 0.3 }] }
+        ]
+      },
+      {
+        category: "DRINKS (KOKEN)", addonType: null,
+        items: [
+          { name: "Coffee", desc: "Freshly brewed", subitems: [{ name: "Cappuccino", price: 169, model: "models/pizza.glb", scale: 0.15 }, { name: "Americano", price: 179, model: "models/pizza.glb", scale: 0.15 }] },
+          { name: "Iced Coffee", desc: "Cool and refreshing", subitems: [{ name: "Hazelnut Mocha", price: 299, model: "models/pizza.glb", scale: 0.15 }, { name: "Vanilla Caramel", price: 299, model: "models/pizza.glb", scale: 0.15 }] },
+          { name: "Milk Shake", desc: "Thick and creamy", subitems: [{ name: "Chocolate Fantasy", price: 219, model: "models/pizza.glb", scale: 0.15 }, { name: "Oreo Orchestra", price: 299, model: "models/pizza.glb", scale: 0.15 }] },
+          { name: "Mocktails", desc: "Fruity twists", subitems: [{ name: "Blue Ocean", price: 169, model: "models/pizza.glb", scale: 0.15 }, { name: "Cox's Lemon Drinks", price: 249, model: "models/pizza.glb", scale: 0.15 }] }
+        ]
+      },
+      {
+        category: "SIDES & COLA", addonType: null,
+        items: [
+          { name: "American Fry", desc: "Crispy french fries", subitems: [{ name: "Regular", price: 139, model: "models/pizza.glb", scale: 0.2 }] },
+          { name: "Chicken Lollipop", desc: "Juicy fried chicken wings", subitems: [{ name: "Regular", price: 159, model: "models/pizza.glb", scale: 0.2 }] },
+          { name: "Cola", desc: "Chilled beverage", subitems: [{ name: "Small", price: 25, model: "models/pizza.glb", scale: 0.1 }, { name: "Medium", price: 45, model: "models/pizza.glb", scale: 0.15 }] }
+        ]
+      }
+    ];
+
+    /* =========================================================
+       CART LOGIC
+    ========================================================= */
+    let cart = [];
+    let pendingCartItem = null;
+
+    function toggleCart() {
+      const sidebar = document.getElementById('cart-sidebar');
+      const overlay = document.getElementById('cart-overlay');
+      sidebar.classList.toggle('active');
+      overlay.classList.toggle('active');
+    }
+
+    function updateCartUI() {
+      document.getElementById('cart-badge').innerText = cart.length;
+      
+      const cartItemsContainer = document.getElementById('cart-items');
+      cartItemsContainer.innerHTML = '';
+      let total = 0;
+
+      if (cart.length === 0) {
+        cartItemsContainer.innerHTML = '<p style="text-align:center; color:#999; margin-top:20px;">Your cart is empty.</p>';
+      } else {
+        cart.forEach((item, index) => {
+          total += item.totalPrice;
+          
+          let addonsText = '';
+          if (item.addons && item.addons.length > 0) {
+            addonsText = `<div class="cart-item-addons">` + item.addons.map(a => `+ ${a.name} (৳${a.price})`).join('<br>') + `</div>`;
+          }
+
+          const el = document.createElement('div');
+          el.className = 'cart-item';
+          el.innerHTML = `
+            <div class="cart-item-header">
+              <span>${item.itemName} (${item.subitemName})</span>
+            </div>
+            ${addonsText}
+            <div class="cart-item-footer">
+              <span class="cart-item-price">৳ ${item.totalPrice}</span>
+              <button class="remove-btn" onclick="removeFromCart(${index})">Remove</button>
+            </div>
+          `;
+          cartItemsContainer.appendChild(el);
+        });
+      }
+
+      document.getElementById('cart-total').innerText = `৳ ${total}`;
+    }
+
+    function removeFromCart(index) {
+      cart.splice(index, 1);
+      updateCartUI();
+    }
+
+    function initiateAddToCart(subitem, itemName, addonType) {
+      pendingCartItem = {
+        itemName: itemName,
+        subitemName: subitem.name,
+        basePrice: subitem.price,
+        totalPrice: subitem.price,
+        addons: []
+      };
+
+      if (addonType && addOnsConfig[addonType]) {
+        openAddonModal(addOnsConfig[addonType]);
+      } else {
+        cart.push(pendingCartItem);
+        pendingCartItem = null;
+        updateCartUI();
+      }
+    }
+
+    /* =========================================================
+       ADDON MODAL LOGIC
+    ========================================================= */
+    const addonModal = document.getElementById('addon-modal');
+    const addonModalBody = document.getElementById('addon-modal-body');
+    const confirmAddonBtn = document.getElementById('confirm-addon-btn');
+
+    function openAddonModal(addonsList) {
+      document.getElementById('addon-modal-title').innerText = `Customize ${pendingCartItem.itemName}`;
+      
+      addonModalBody.innerHTML = '';
+      addonsList.forEach((addon, index) => {
+        const row = document.createElement('div');
+        row.className = 'addon-row';
+        row.innerHTML = `
+          <label>
+            <input type="checkbox" id="addon-${index}" value='${JSON.stringify(addon)}' onchange="updatePendingTotal()">
+            ${addon.name}
+          </label>
+          <span class="addon-price">+৳${addon.price}</span>
+        `;
+        addonModalBody.appendChild(row);
+      });
+
+      confirmAddonBtn.innerText = `Add to Cart - ৳${pendingCartItem.basePrice}`;
+      addonModal.classList.add('active');
+    }
+
+    function closeAddonModal() {
+      addonModal.classList.remove('active');
+      pendingCartItem = null;
+    }
+
+    function updatePendingTotal() {
+      const allCheckboxes = document.querySelectorAll('.modal-body input[type="checkbox"]');
+      let extra = 0;
+      allCheckboxes.forEach(cb => {
+        if (cb.checked) {
+          const ad = JSON.parse(cb.value);
+          extra += ad.price;
+        }
+      });
+      confirmAddonBtn.innerText = `Add to Cart - ৳${pendingCartItem.basePrice + extra}`;
+    }
+
+    function confirmAddonSelection() {
+      const allCheckboxes = document.querySelectorAll('.modal-body input[type="checkbox"]');
+      let extra = 0;
+      pendingCartItem.addons = [];
+      
+      allCheckboxes.forEach(cb => {
+        if (cb.checked) {
+          const ad = JSON.parse(cb.value);
+          pendingCartItem.addons.push(ad);
+          extra += ad.price;
+        }
+      });
+
+      pendingCartItem.totalPrice = pendingCartItem.basePrice + extra;
+      cart.push(pendingCartItem);
+      updateCartUI();
+      
+      addonModal.classList.remove('active');
+      pendingCartItem = null;
+    }
+
+    /* =========================================================
+       UI LOGIC
+    ========================================================= */
+    const categoryContainer = document.getElementById('category-container');
+    const menuContainer = document.getElementById('menu-container');
+    const viewerOverlay = document.getElementById('viewer-overlay');
+    const mv = document.getElementById('mv');
+    
+    let activeCategory = menuData[0].category;
+
+    function initUI() {
+      renderCategories();
+      renderMenu();
+    }
+
+    function renderCategories() {
+      categoryContainer.innerHTML = '';
+      menuData.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = `category-btn ${cat.category === activeCategory ? 'active' : ''}`;
+        btn.innerText = cat.category;
+        btn.onclick = () => {
+          activeCategory = cat.category;
+          renderCategories();
+          renderMenu();
+        };
+        categoryContainer.appendChild(btn);
+      });
+    }
+
+    function renderMenu() {
+      menuContainer.innerHTML = '';
+      const categoryData = menuData.find(c => c.category === activeCategory);
+      if (!categoryData) return;
+
+      categoryData.items.forEach((item, index) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'menu-item';
+        
+        const header = document.createElement('div');
+        header.className = 'menu-item-header';
+        
+        // Check if the main item has a model defined (for a single shared 3D button)
+        const hasMainModel = item.model && item.scale;
+        let headerActions = '';
+        
+        if (hasMainModel) {
+          // Create a mock subitem object for the viewer
+          const fakeSub = { name: "3D Preview", price: item.subitems[0].price, model: item.model, scale: item.scale };
+          const subDataStr = JSON.stringify(fakeSub).replace(/"/g, '&quot;');
+          const itemNameStr = item.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          
+          headerActions = `
+            <button class="btn btn-3d" style="background: var(--primary); color: white;" onclick="event.stopPropagation(); openViewer(${subDataStr}, '${itemNameStr}')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+              View 3D
+            </button>
+          `;
+        }
+
+        header.innerHTML = `
+          <div class="menu-item-info">
+            <h3>${item.name}</h3>
+            <p>${item.desc}</p>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            ${headerActions}
+            <div class="expand-icon">▼</div>
+          </div>
+        `;
+        
+        const subContainer = document.createElement('div');
+        subContainer.className = 'subitems-container';
+        
+        item.subitems.forEach(sub => {
+          const subEl = document.createElement('div');
+          subEl.className = 'subitem';
+          
+          let sub3DBtn = '';
+          const itemNameStr = item.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+          
+          // Only show subitem 3D button if the main item DOES NOT have one, and the subitem DOES have one
+          if (!hasMainModel && sub.model && sub.scale) {
+            const subDataStr = JSON.stringify(sub).replace(/"/g, '&quot;');
+            sub3DBtn = `
+              <button class="btn btn-3d" onclick="openViewer(${subDataStr}, '${itemNameStr}')">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                3D
+              </button>
+            `;
+          }
+
+          const addonTypeStr = categoryData.addonType ? `'${categoryData.addonType}'` : 'null';
+          const subAddToCartStr = JSON.stringify(sub).replace(/"/g, '&quot;');
+
+          subEl.innerHTML = `
+            <div class="subitem-info">
+              <h4>${sub.name}</h4>
+              <div class="price">৳ ${sub.price}</div>
+            </div>
+            <div class="actions">
+              ${sub3DBtn}
+              <button class="btn btn-add" onclick="initiateAddToCart(${subAddToCartStr}, '${itemNameStr}', ${addonTypeStr})">
+                Add
+              </button>
+            </div>
+          `;
+          subContainer.appendChild(subEl);
+        });
+
+        itemEl.appendChild(header);
+        itemEl.appendChild(subContainer);
+
+        header.onclick = () => {
+          const isExpanded = itemEl.classList.contains('expanded');
+          document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('expanded'));
+          if (!isExpanded) itemEl.classList.add('expanded');
+        };
+
+        if (index === 0) itemEl.classList.add('expanded');
+        menuContainer.appendChild(itemEl);
+      });
+    }
+
+    let currentModelURL = "";
+    let currentModelScale = 0.8;
+
+    function openViewer(subitem, itemName) {
+      document.getElementById('viewer-name').innerText = `${itemName} (${subitem.name})`;
+      document.getElementById('viewer-price').innerText = `৳ ${subitem.price}`;
+      
+      currentModelURL = subitem.model;
+      currentModelScale = subitem.scale;
+      
+      mv.src = currentModelURL;
+      viewerOverlay.classList.add('active');
+    }
+
+    function closeViewer() {
+      viewerOverlay.classList.remove('active');
+    }
+
+    // Close viewer when clicking outside card
+    viewerOverlay.addEventListener('click', (e) => {
+      if (e.target === viewerOverlay) closeViewer();
+    });
+
+    initUI();
+
+    /* =========================================================
+       XR VARIABLES
+    ========================================================= */
+
+    let renderer;
+    let scene;
+    let camera;
+
+    let xrSession;
+    let hitTestSource;
+
+    let reticle;
+    let placementRoot;
+    let modelGroup;
+
+    let latestHit = null;
+
+    let placed = false;
+
+    let smoothedPosition = new THREE.Vector3();
+    let smoothedQuaternion = new THREE.Quaternion();
+
+    let reticleInitialized = false;
+
+    let stableFrames = 0;
+
+    let shadowPlane;
+
+    let userScale = 1;
+
+    /* =========================================================
+       DOM
+    ========================================================= */
+
+    const overlay = document.getElementById("overlay");
+    const hint = document.getElementById("hint");
+    const placeBtn = document.getElementById("place-btn");
+    const controls = document.getElementById("controls");
+
+    /* =========================================================
+       START AR
+    ========================================================= */
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && xrSession) {
+        xrSession.end();
+      }
+    });
+
+    async function launchAR() {
+
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      
+      if (isIOS || !navigator.xr) {
+        mv.setAttribute('ar', '');
+        mv.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
+        try {
+          await mv.activateAR();
+        } catch (e) {
+          alert("AR is not supported on this device/browser.");
+        }
+        return;
+      }
+
+      xrSession = await navigator.xr.requestSession(
+        "immersive-ar",
+        {
+          requiredFeatures: ["hit-test"],
+
+          optionalFeatures: [
+            "anchors",
+            "dom-overlay",
+            "local-floor",
+            "light-estimation"
+          ],
+
+          domOverlay: { root: overlay }
+        }
+      );
+
+      overlay.classList.add("active");
+
+      // Dynamically create the canvas to guarantee a fresh WebGL context every time AR is launched
+      let canvas = document.getElementById("xr-canvas");
+      if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.id = "xr-canvas";
+        overlay.insertBefore(canvas, overlay.firstChild);
+      }
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        alpha: true,
+        antialias: true
+      });
+
+      renderer.xr.enabled = true;
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+      /* =====================================================
+         LIGHTS
+      ===================================================== */
+
+      const ambient = new THREE.AmbientLight(
+        0xffffff,
+        1.1
+      );
+
+      scene.add(ambient);
+
+      const dir = new THREE.DirectionalLight(
+        0xffffff,
+        1
+      );
+
+      dir.position.set(1, 3, 2);
+
+      dir.castShadow = true;
+      dir.shadow.mapSize.width = 1024;
+      dir.shadow.mapSize.height = 1024;
+
+      scene.add(dir);
+
+      /* =====================================================
+         RETICLE
+      ===================================================== */
+
+      const reticleGeo = new THREE.RingGeometry(
+        0.06,
+        0.09,
+        40
+      );
+
+      const reticleMat = new THREE.MeshBasicMaterial({
+        color: 0xd92b2b,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide
+      });
+
+      reticle = new THREE.Mesh(
+        reticleGeo,
+        reticleMat
+      );
+
+      reticle.rotation.x = -Math.PI / 2;
+
+      reticle.visible = false;
+
+      scene.add(reticle);
+
+      /* =====================================================
+         ROOT
+      ===================================================== */
+
+      placementRoot = new THREE.Group();
+
+      scene.add(placementRoot);
+
+      modelGroup = new THREE.Group();
+      modelGroup.visible = false;
+
+      placementRoot.add(modelGroup);
+
+      /* =====================================================
+         SHADOW
+      ===================================================== */
+
+      shadowPlane = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 1),
+        new THREE.ShadowMaterial({
+          opacity: 0.3
+        })
+      );
+
+        shadowPlane.rotation.x = -Math.PI / 2;
+        shadowPlane.receiveShadow = true;
+        shadowPlane.visible = false;
+        placementRoot.add(shadowPlane);
+
+      // Ensure fresh state for new sessions
+      modelGroup.visible = false;
+      shadowPlane.visible = false;
+      reticle.visible = false;
+      placed = false;
+      reticleInitialized = false;
+      userScale = 1;
+      hint.innerHTML = "Move phone slowly to detect surface...";
+      placeBtn.classList.remove("ready");
+      controls.classList.remove("visible");
+
+      mv.style.display = "none";
+      await loadModel();
+
+      /* =====================================================
+         XR SETUP
+      ===================================================== */
+
+      const viewerSpace =
+        await xrSession.requestReferenceSpace(
+          "viewer"
+        );
+
+      hitTestSource =
+        await xrSession.requestHitTestSource({
+          space: viewerSpace
+        });
+
+      placeBtn.onclick = placeModel;
+
+      renderer.xr.setSession(xrSession);
+
+      renderer.setAnimationLoop(renderXR);
+
+      xrSession.addEventListener(
+        "end",
+        onSessionEnd
+      );
+
+      xrSession.addEventListener(
+        "select",
+        placeModel
+      );
+
+      overlay.addEventListener("touchstart", onTouchStart, { passive: false });
+      overlay.addEventListener("touchmove", onTouchMove, { passive: false });
+      overlay.addEventListener("touchend", onTouchEnd);
+    }
+
+    /* =========================================================
+       LOAD MODEL
+    ========================================================= */
+
+    async function loadModel() {
+
+      while (modelGroup.children.length > 0) {
+        modelGroup.remove(modelGroup.children[0]);
+      }
+
+      return new Promise((resolve, reject) => {
+
+        const loader = new THREE.GLTFLoader();
+
+        loader.load(
+          currentModelURL,
+
+          gltf => {
+
+            const model = gltf.scene;
+
+            model.traverse(o => {
+              if (o.isMesh) {
+                o.castShadow = true;
+                o.receiveShadow = true;
+              }
+            });
+
+            /* =============================================
+               NORMALIZE SCALE
+            ============================================= */
+
+            const box =
+              new THREE.Box3().setFromObject(model);
+
+            const size =
+              box.getSize(new THREE.Vector3());
+
+            const maxAxis =
+              Math.max(size.x, size.y, size.z);
+
+            const targetMeters = currentModelScale;
+
+            const scale =
+              targetMeters / maxAxis;
+
+            model.scale.setScalar(scale);
+
+            box.setFromObject(model);
+
+            const center =
+              box.getCenter(new THREE.Vector3());
+
+            model.position.x -= center.x;
+            model.position.z -= center.z;
+            
+            // TUNE THIS VALUE: Positive values move the model DOWN into the floor.
+            // 0.015 = 1.5 cm. If it sinks too much, try 0.005 (half a cm).
+            const downwardOffset = 0.005; 
+            model.position.y -= (box.min.y + downwardOffset);
+
+            modelGroup.add(model);
+
+            shadowPlane.scale.setScalar(
+              targetMeters * 1.0
+            );
+
+            resolve();
+          },
+
+          undefined,
+
+          reject
+        );
+      });
+    }
+
+    /* =========================================================
+       MATH HELPERS FOR PERFORMANCE
+    ========================================================= */
+
+    const tempMatrix = new THREE.Matrix4();
+    const tempPos = new THREE.Vector3();
+    const tempFullQ = new THREE.Quaternion();
+    const tempEuler = new THREE.Euler();
+    const tempEulerFlat = new THREE.Euler();
+    const tempFlatQ = new THREE.Quaternion();
+
+    /* =========================================================
+       FRAME LOOP
+    ========================================================= */
+
+    function renderXR(time, frame) {
+
+      if (!frame) return;
+
+      const refSpace = renderer.xr.getReferenceSpace();
+
+      if (!placed && refSpace) {
+
+        const hits =
+          frame.getHitTestResults(hitTestSource);
+
+        if (hits.length > 0) {
+
+          latestHit = hits[0];
+
+          const pose =
+            latestHit.getPose(refSpace);
+
+          if (pose) {
+
+            const transform = pose.transform;
+
+            tempMatrix.fromArray(transform.matrix);
+            tempPos.setFromMatrixPosition(tempMatrix);
+
+            const q = transform.orientation;
+            tempFullQ.set(q.x, q.y, q.z, q.w);
+
+            tempEuler.setFromQuaternion(tempFullQ, "YXZ");
+            tempEulerFlat.set(0, tempEuler.y, 0, "YXZ");
+
+            tempFlatQ.setFromEuler(tempEulerFlat);
+
+            /* =========================================
+               SMOOTHING
+            ========================================= */
+
+            if (!reticleInitialized) {
+
+              smoothedPosition.copy(tempPos);
+              smoothedQuaternion.copy(tempFlatQ);
+
+              reticleInitialized = true;
+
+            } else {
+
+              smoothedPosition.lerp(tempPos, 0.4);
+              smoothedQuaternion.slerp(tempFlatQ, 0.4);
+            }
+
+            /* =========================================
+               STABILITY CHECK
+            ========================================= */
+
+            reticle.position.copy(
+              smoothedPosition
+            );
+
+            reticle.quaternion.copy(
+              smoothedQuaternion
+            );
+
+            reticle.visible = true;
+
+            /* =========================================
+               RETICLE PULSE
+            ========================================= */
+
+            reticle.material.opacity =
+              0.55 +
+              Math.sin(time * 0.005) * 0.2;
+
+            placeBtn.classList.add("ready");
+            hint.innerHTML = "Surface found • Tap Place";
+          }
+
+        } else {
+
+          reticle.visible = false;
+
+          stableFrames = 0;
+
+          placeBtn.classList.remove("ready");
+
+          hint.innerHTML =
+            "Move phone slowly...";
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    /* =========================================================
+       PLACE MODEL
+    ========================================================= */
+
+    async function placeModel() {
+
+      if (!latestHit || !reticle.visible) return;
+
+      placementRoot.position.copy(
+        reticle.position
+      );
+
+      placementRoot.quaternion.copy(
+        reticle.quaternion
+      );
+
+      modelGroup.visible = true;
+
+      shadowPlane.visible = true;
+
+      placed = true;
+
+      controls.classList.add("visible");
+
+      placeBtn.classList.remove("ready");
+
+      hint.innerHTML =
+        "Dish placed 🎉";
+
+      reticle.visible = false;
+
+      if (hitTestSource) {
+
+        hitTestSource.cancel();
+
+        hitTestSource = null;
+      }
+    }
+
+    /* =========================================================
+       SCALE
+    ========================================================= */
+
+    function scaleModel(mult) {
+
+      userScale *= mult;
+
+      userScale = Math.max(
+        0.3,
+        Math.min(userScale, 4)
+      );
+
+      modelGroup.scale.setScalar(userScale);
+    }
+
+    /* =========================================================
+       STOP
+    ========================================================= */
+
+    function stopAR() {
+
+      if (xrSession) {
+        xrSession.end();
+      }
+    }
+
+    function onSessionEnd() {
+
+      mv.style.display = "block";
+      overlay.classList.remove("active");
+
+      if (renderer) {
+        renderer.setAnimationLoop(null);
+        renderer.dispose();
+        
+        // Destroy the canvas to immediately free GPU memory on mobile devices and prevent freezing
+        const canvas = document.getElementById("xr-canvas");
+        if (canvas) {
+          canvas.remove();
+        }
+      }
+
+      renderer = null;
+      xrSession = null;
+      hitTestSource = null;
+      placed = false;
+      stableFrames = 0;
+      reticleInitialized = false;
+      controls.classList.remove("visible");
+      hint.innerHTML = "Move phone slowly to detect surface...";
+    }
+
+    /* =========================================================
+       TOUCH INTERACTIONS
+    ========================================================= */
+
+    let isDragging = false;
+    let initialPinchDist = 0;
+    let initialUserScale = 1;
+
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+
+    function getPinchDist(e) {
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function onTouchStart(e) {
+      if (!placed) return;
+
+      if (e.touches.length === 1) {
+        isDragging = true;
+        lastTouchX = e.touches[0].clientX;
+        lastTouchY = e.touches[0].clientY;
+      } else if (e.touches.length === 2) {
+        isDragging = false;
+        initialPinchDist = getPinchDist(e);
+        initialUserScale = userScale;
+      }
+    }
+
+    function onTouchMove(e) {
+      e.preventDefault();
+      if (!placed) return;
+
+      if (e.touches.length === 1 && isDragging) {
+        const dx = e.touches[0].clientX - lastTouchX;
+        const dy = e.touches[0].clientY - lastTouchY;
+
+        lastTouchX = e.touches[0].clientX;
+        lastTouchY = e.touches[0].clientY;
+
+        const xrCamera = renderer.xr.getCamera(camera);
+        const activeCamera = xrCamera.cameras.length > 0 ? xrCamera.cameras[0] : xrCamera;
+
+        const moveSpeed = 0.001;
+
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(activeCamera.quaternion);
+        right.y = 0;
+        right.normalize();
+
+        const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(activeCamera.quaternion);
+        forward.y = 0;
+        forward.normalize();
+
+        // Inverted signs to fix the reverse movement issue
+        placementRoot.position.addScaledVector(right, -dx * moveSpeed);
+        placementRoot.position.addScaledVector(forward, dy * moveSpeed);
+
+      } else if (e.touches.length === 2) {
+        const dist = getPinchDist(e);
+        const scaleMult = dist / initialPinchDist;
+        userScale = initialUserScale * scaleMult;
+        userScale = Math.max(0.3, Math.min(userScale, 4));
+        modelGroup.scale.setScalar(userScale);
+      }
+    }
+
+    function onTouchEnd(e) {
+      if (e.touches.length < 2) {
+        initialPinchDist = 0;
+      }
+      if (e.touches.length === 0) {
+        isDragging = false;
+      }
+    }
+  </script>
+</body>
+</html>
