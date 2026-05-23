@@ -11,6 +11,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
+  <!-- Preconnect to model host for faster first-byte -->
+  <link rel="preconnect" href="https://ajax.googleapis.com">
+  <link rel="dns-prefetch" href="https://ajax.googleapis.com">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -127,6 +131,19 @@
     .close-viewer { background: #eee; border: none; color: var(--text-main); width: 36px; height: 36px; border-radius: 50%; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold;}
     
     model-viewer { width: 100%; height: 30vh; min-height: 250px; background: transparent; outline: none; border-radius: 20px; }
+    model-viewer::part(default-progress-bar) { display: none; }
+
+    /* Loading wrap */
+    .mv-loading-wrap { position: relative; width: 100%; height: 30vh; min-height: 250px; border-radius: 20px; overflow: hidden; background: #f0f0f0; display: flex; align-items: center; justify-content: center; }
+    .mv-loading-wrap model-viewer { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; }
+    .mv-spinner { position: absolute; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; transition: opacity 0.3s; }
+    .mv-spinner.hidden { opacity: 0; }
+    .mv-spinner-ring { width: 40px; height: 40px; border: 3px solid #ddd; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .mv-spinner-text { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .cache-badge { position: absolute; top: 10px; left: 10px; z-index: 3; background: rgba(0,180,80,0.85); color: white; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 999px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    .cache-badge.show { opacity: 1; }
     
     .launch-btn { margin-top: 24px; background: var(--primary); color: white; border: none; border-radius: 16px; padding: 18px; font-size: 16px; font-weight: 800; cursor: pointer; width: 100%; display: flex; justify-content: center; align-items: center; gap: 10px; box-shadow: 0 8px 20px rgba(217, 43, 43, 0.3); }
 
@@ -230,9 +247,18 @@
         <button class="close-viewer" onclick="closeViewer()">✕</button>
       </div>
       
-      <model-viewer id="mv" src="" camera-controls auto-rotate shadow-intensity="1" exposure="1" environment-image="neutral"></model-viewer>
+      <div class="mv-loading-wrap">
+        <model-viewer id="mv" src="" camera-controls auto-rotate shadow-intensity="1" exposure="1" environment-image="neutral" ar ar-modes="quick-look" ar-scale="fixed" ar-placement="floor">
+          <button slot="ar-button" id="mv-ar-btn" style="display:none"></button>
+        </model-viewer>
+        <div class="mv-spinner" id="mv-spinner">
+          <div class="mv-spinner-ring"></div>
+          <div class="mv-spinner-text">Loading 3D model...</div>
+        </div>
+        <div class="cache-badge" id="cache-badge">⚡ Instant</div>
+      </div>
 
-      <button class="launch-btn" onclick="launchAR()">
+      <button class="launch-btn" id="launch-ar-btn" onclick="launchAR()">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
         View in AR
       </button>
@@ -615,8 +641,61 @@
       
       currentModelURL = subitem.model;
       currentModelScale = subitem.scale;
-      
-      mv.src = currentModelURL;
+
+      const mvEl = document.getElementById('mv');
+      const spinner = document.getElementById('mv-spinner');
+      const cacheBadge = document.getElementById('cache-badge');
+
+      // Set AR attributes
+      mvEl.removeAttribute('ios-src');
+      mvEl.setAttribute('ar', '');
+      mvEl.setAttribute('ar-modes', 'quick-look');
+      mvEl.setAttribute('ar-scale', 'fixed');
+      mvEl.setAttribute('ar-placement', 'floor');
+      mvEl.setAttribute('scale', `${currentModelScale} ${currentModelScale} ${currentModelScale}`);
+
+      const isCached = gltfCache.has(currentModelURL);
+
+      if (isCached) {
+        // Instant: model is in cache — set src, hide spinner immediately
+        spinner.classList.add('hidden');
+        cacheBadge.classList.add('show');
+        setTimeout(() => cacheBadge.classList.remove('show'), 1500);
+      } else {
+        // First time: show spinner, hide when loaded
+        spinner.classList.remove('hidden');
+        cacheBadge.classList.remove('show');
+        // Start background fetch into cache at the same time model-viewer loads
+        loadGLTF(currentModelURL).catch(() => {});
+      }
+
+      // model-viewer handles its own loading; listen for its load event
+      const onMVLoad = () => {
+        spinner.classList.add('hidden');
+        mvEl.removeEventListener('load', onMVLoad);
+      };
+      mvEl.addEventListener('load', onMVLoad);
+
+      mvEl.src = currentModelURL;
+
+      const launchBtn = document.getElementById('launch-ar-btn');
+
+      if (!isMobile) {
+        launchBtn.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          AR on mobile only
+        `;
+        launchBtn.style.opacity = '0.45';
+        launchBtn.style.cursor = 'default';
+      } else {
+        launchBtn.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          View in AR
+        `;
+        launchBtn.style.opacity = '1';
+        launchBtn.style.cursor = 'pointer';
+      }
+
       viewerOverlay.classList.add('active');
     }
 
@@ -630,6 +709,93 @@
     });
 
     initUI();
+    schedulePreload(); // begin background preloading during idle time
+
+    /* =========================================================
+       GLB CACHE — parsed GLTF stored by URL
+       First load: fetch + parse (slow, one time only)
+       All subsequent loads: clone from memory (instant)
+    ========================================================= */
+
+    const gltfCache = new Map();   // url → parsed gltf object
+    const loadingPromises = new Map(); // url → in-flight Promise (dedup concurrent requests)
+    const loader = new THREE.GLTFLoader(); // single shared loader instance
+
+    function loadGLTF(url) {
+      // Already cached → return immediately
+      if (gltfCache.has(url)) {
+        return Promise.resolve(gltfCache.get(url));
+      }
+      // Already loading → return same promise (dedup)
+      if (loadingPromises.has(url)) {
+        return loadingPromises.get(url);
+      }
+      // Fresh load
+      const promise = new Promise((resolve, reject) => {
+        loader.load(url, gltf => {
+          gltfCache.set(url, gltf);
+          loadingPromises.delete(url);
+          resolve(gltf);
+        }, undefined, err => {
+          loadingPromises.delete(url);
+          reject(err);
+        });
+      });
+      loadingPromises.set(url, promise);
+      return promise;
+    }
+
+    // Background preload a model URL (silent, no UI impact)
+    function preload(url) {
+      if (!url || gltfCache.has(url) || loadingPromises.has(url)) return;
+      loadGLTF(url).catch(() => {}); // silent fail — preload is best-effort
+    }
+
+    // Collect all unique model URLs from menuData for preloading
+    function getAllModelURLs() {
+      const urls = new Set();
+      menuData.forEach(cat => {
+        cat.items.forEach(item => {
+          if (item.model) urls.add(item.model);
+          if (item.subitems) item.subitems.forEach(s => { if (s.model) urls.add(s.model); });
+        });
+      });
+      return [...urls];
+    }
+
+    // Preload all models during browser idle time
+    // Uses requestIdleCallback so it never blocks UI/rendering
+    function schedulePreload() {
+      const urls = getAllModelURLs();
+      let i = 0;
+      function next(deadline) {
+        // Load one model per idle slice, yield back between each
+        while (i < urls.length && (deadline.timeRemaining() > 10 || deadline.didTimeout)) {
+          preload(urls[i++]);
+          break; // one per callback to stay non-blocking
+        }
+        if (i < urls.length) {
+          requestIdleCallback(next, { timeout: 3000 });
+        }
+      }
+      // Delay first preload by 2s so page render + first paint are not affected
+      setTimeout(() => {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(next, { timeout: 3000 });
+        } else {
+          // Fallback: load all with small stagger in the background
+          urls.forEach((url, idx) => setTimeout(() => preload(url), 2000 + idx * 500));
+        }
+      }, 2000);
+    }
+
+    /* =========================================================
+       PLATFORM DETECTION
+    ========================================================= */
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const isMobile = isIOS || isAndroid;
 
     /* =========================================================
        XR VARIABLES
@@ -682,16 +848,64 @@
 
     async function launchAR() {
 
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      
-      if (isIOS || !navigator.xr) {
-        mv.setAttribute('ar', '');
-        mv.setAttribute('ar-modes', 'webxr scene-viewer quick-look');
-        try {
-          await mv.activateAR();
-        } catch (e) {
-          alert("AR is not supported on this device/browser.");
+      // ── Desktop ──────────────────────────────────────────────
+      if (!isMobile) {
+        alert("AR is available on Android and iOS mobile devices only.\nYou can view the 3D model here.");
+        return;
+      }
+
+      // ── iOS Safari: AR Quick Look via model-viewer ────────────
+      // iOS Safari has NEVER supported WebXR immersive-ar.
+      // AR Quick Look (triggered by model-viewer) is the only
+      // real AR on iOS and already does surface detection +
+      // tap-to-place natively — no auto spawn, sticks to surface.
+      if (isIOS) {
+        const mvEl = document.getElementById('mv');
+
+        // Ensure correct AR attributes
+        mvEl.setAttribute('ar', '');
+        mvEl.setAttribute('ar-modes', 'quick-look');
+        mvEl.setAttribute('ar-scale', 'fixed');
+        mvEl.setAttribute('ar-placement', 'floor');
+
+        // If model-viewer is already ready, activate immediately
+        if (mvEl.canActivateAR) {
+          mvEl.activateAR();
+          return;
         }
+
+        // Otherwise wait for the model to load then activate
+        const activate = () => {
+          mvEl.removeEventListener('load', activate);
+          if (mvEl.canActivateAR) {
+            mvEl.activateAR();
+          } else {
+            alert("AR not available on this device. Make sure you're using Safari on iOS 13+.");
+          }
+        };
+        mvEl.addEventListener('load', activate);
+
+        // If model is already loaded but canActivateAR is still false
+        // (can happen before model-viewer fully initialises AR)
+        setTimeout(() => {
+          if (mvEl.canActivateAR) {
+            mvEl.removeEventListener('load', activate);
+            mvEl.activateAR();
+          }
+        }, 800);
+
+        return;
+      }
+
+      // ── Android Chrome: custom WebXR hit-test pipeline ────────
+      if (!navigator.xr) {
+        alert("WebXR not supported.\nPlease use Chrome on Android.");
+        return;
+      }
+
+      const supported = await navigator.xr.isSessionSupported("immersive-ar").catch(() => false);
+      if (!supported) {
+        alert("Immersive AR not supported.\nPlease use Chrome on Android with ARCore.");
         return;
       }
 
@@ -699,14 +913,7 @@
         "immersive-ar",
         {
           requiredFeatures: ["hit-test"],
-
-          optionalFeatures: [
-            "anchors",
-            "dom-overlay",
-            "local-floor",
-            "light-estimation"
-          ],
-
+          optionalFeatures: ["anchors", "dom-overlay", "local-floor", "light-estimation"],
           domOverlay: { root: overlay }
         }
       );
@@ -761,32 +968,34 @@
       scene.add(dir);
 
       /* =====================================================
-         RETICLE
+         RETICLE — outer ring + inner fill circle
       ===================================================== */
 
-      const reticleGeo = new THREE.RingGeometry(
-        0.06,
-        0.09,
-        40
-      );
+      const reticleGroup = new THREE.Group();
+      reticleGroup.rotation.x = -Math.PI / 2;
+      reticleGroup.visible = false;
+      scene.add(reticleGroup);
+      reticle = reticleGroup; // alias so existing code works
 
-      const reticleMat = new THREE.MeshBasicMaterial({
-        color: 0xd92b2b,
-        transparent: true,
-        opacity: 0.9,
-        side: THREE.DoubleSide
+      // Outer ring
+      const outerRingGeo = new THREE.RingGeometry(0.07, 0.10, 48);
+      const outerRingMat = new THREE.MeshBasicMaterial({
+        color: 0xd92b2b, transparent: true, opacity: 0.9, side: THREE.DoubleSide
       });
+      const outerRing = new THREE.Mesh(outerRingGeo, outerRingMat);
+      reticleGroup.add(outerRing);
 
-      reticle = new THREE.Mesh(
-        reticleGeo,
-        reticleMat
-      );
+      // Inner filled circle (soft)
+      const innerCircleGeo = new THREE.CircleGeometry(0.055, 48);
+      const innerCircleMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide
+      });
+      const innerCircle = new THREE.Mesh(innerCircleGeo, innerCircleMat);
+      innerCircle.position.z = 0.001;
+      reticleGroup.add(innerCircle);
 
-      reticle.rotation.x = -Math.PI / 2;
-
-      reticle.visible = false;
-
-      scene.add(reticle);
+      // Store ring material ref for pulse animation
+      reticle.material = outerRingMat; // used for opacity pulse
 
       /* =====================================================
          ROOT
@@ -823,7 +1032,7 @@
       reticle.visible = false;
       placed = false;
       reticleInitialized = false;
-      userScale = 1;
+      userScale = 1.0;  // model is normalized to currentModelScale meters
       hint.innerHTML = "Move phone slowly to detect surface...";
       placeBtn.classList.remove("ready");
       controls.classList.remove("visible");
@@ -835,31 +1044,35 @@
          XR SETUP
       ===================================================== */
 
-      const viewerSpace =
-        await xrSession.requestReferenceSpace(
-          "viewer"
-        );
+      // viewer space is used ONLY for the hit-test ray origin
+      const viewerSpace = await xrSession.requestReferenceSpace("viewer");
 
-      hitTestSource =
-        await xrSession.requestHitTestSource({
-          space: viewerSpace
-        });
+      hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
+
+      // local-floor anchors world objects to the floor — prevents floating
+      // Fall back to local if local-floor unavailable
+      let worldRefSpace;
+      try {
+        worldRefSpace = await xrSession.requestReferenceSpace("local-floor");
+      } catch(e) {
+        worldRefSpace = await xrSession.requestReferenceSpace("local");
+      }
+      // Store on session so renderXR can access it
+      xrSession._worldRefSpace = worldRefSpace;
 
       placeBtn.onclick = placeModel;
 
       renderer.xr.setSession(xrSession);
-
       renderer.setAnimationLoop(renderXR);
 
-      xrSession.addEventListener(
-        "end",
-        onSessionEnd
-      );
+      xrSession.addEventListener("end", onSessionEnd);
 
-      xrSession.addEventListener(
-        "select",
-        placeModel
-      );
+      // 'select' = screen tap on both Android and iOS — only place if reticle is ready
+      xrSession.addEventListener("select", () => {
+        if (!placed && reticle && reticle.visible) {
+          placeModel();
+        }
+      });
 
       overlay.addEventListener("touchstart", onTouchStart, { passive: false });
       overlay.addEventListener("touchmove", onTouchMove, { passive: false });
@@ -867,80 +1080,61 @@
     }
 
     /* =========================================================
-       LOAD MODEL
+       LOAD MODEL (Android AR — uses GLB cache)
     ========================================================= */
 
     async function loadModel() {
 
+      // Clear previous model
       while (modelGroup.children.length > 0) {
-        modelGroup.remove(modelGroup.children[0]);
+        const child = modelGroup.children[0];
+        modelGroup.remove(child);
+        // Dispose geometries/materials to free GPU memory
+        child.traverse(o => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material) {
+            if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+            else o.material.dispose();
+          }
+        });
       }
 
-      return new Promise((resolve, reject) => {
+      // Load from cache (instant) or fetch+parse (first time only)
+      const gltf = await loadGLTF(currentModelURL);
 
-        const loader = new THREE.GLTFLoader();
+      // Clone the cached scene so the original stays clean for reuse
+      const model = gltf.scene.clone(true);
 
-        loader.load(
-          currentModelURL,
-
-          gltf => {
-
-            const model = gltf.scene;
-
-            model.traverse(o => {
-              if (o.isMesh) {
-                o.castShadow = true;
-                o.receiveShadow = true;
-              }
-            });
-
-            /* =============================================
-               NORMALIZE SCALE
-            ============================================= */
-
-            const box =
-              new THREE.Box3().setFromObject(model);
-
-            const size =
-              box.getSize(new THREE.Vector3());
-
-            const maxAxis =
-              Math.max(size.x, size.y, size.z);
-
-            const targetMeters = currentModelScale;
-
-            const scale =
-              targetMeters / maxAxis;
-
-            model.scale.setScalar(scale);
-
-            box.setFromObject(model);
-
-            const center =
-              box.getCenter(new THREE.Vector3());
-
-            model.position.x -= center.x;
-            model.position.z -= center.z;
-            
-            // TUNE THIS VALUE: Positive values move the model DOWN into the floor.
-            // 0.015 = 1.5 cm. If it sinks too much, try 0.005 (half a cm).
-            const downwardOffset = 0.005; 
-            model.position.y -= (box.min.y + downwardOffset);
-
-            modelGroup.add(model);
-
-            shadowPlane.scale.setScalar(
-              targetMeters * 1.0
-            );
-
-            resolve();
-          },
-
-          undefined,
-
-          reject
-        );
+      model.traverse(o => {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+        }
       });
+
+      /* =====================================================
+         NORMALIZE SCALE
+      ===================================================== */
+
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const maxAxis = Math.max(size.x, size.y, size.z);
+      const targetMeters = currentModelScale;
+      const scale = targetMeters / maxAxis;
+      model.scale.setScalar(scale);
+
+      box.setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.x -= center.x;
+      model.position.z -= center.z;
+
+      const downwardOffset = 0.005;
+      model.position.y -= (box.min.y + downwardOffset);
+
+      modelGroup.add(model);
+      modelGroup.scale.setScalar(userScale);
+
+      shadowPlane.scale.setScalar(targetMeters * 1.0);
     }
 
     /* =========================================================
@@ -962,19 +1156,20 @@
 
       if (!frame) return;
 
-      const refSpace = renderer.xr.getReferenceSpace();
+      // Use the world reference space (local-floor) for stable hit-test pose
+      const refSpace = xrSession && xrSession._worldRefSpace
+        ? xrSession._worldRefSpace
+        : renderer.xr.getReferenceSpace();
 
-      if (!placed && refSpace) {
+      if (!placed && refSpace && hitTestSource) {
 
-        const hits =
-          frame.getHitTestResults(hitTestSource);
+        const hits = frame.getHitTestResults(hitTestSource);
 
         if (hits.length > 0) {
 
           latestHit = hits[0];
 
-          const pose =
-            latestHit.getPose(refSpace);
+          const pose = latestHit.getPose(refSpace);
 
           if (pose) {
 
@@ -986,64 +1181,42 @@
             const q = transform.orientation;
             tempFullQ.set(q.x, q.y, q.z, q.w);
 
+            // Flatten rotation to Y-axis only so reticle lies flat on surface
             tempEuler.setFromQuaternion(tempFullQ, "YXZ");
             tempEulerFlat.set(0, tempEuler.y, 0, "YXZ");
-
             tempFlatQ.setFromEuler(tempEulerFlat);
 
             /* =========================================
-               SMOOTHING
+               SMOOTHING — gentle lerp so reticle
+               glides to surface without jitter
             ========================================= */
 
             if (!reticleInitialized) {
-
               smoothedPosition.copy(tempPos);
               smoothedQuaternion.copy(tempFlatQ);
-
               reticleInitialized = true;
-
             } else {
-
-              smoothedPosition.lerp(tempPos, 0.4);
-              smoothedQuaternion.slerp(tempFlatQ, 0.4);
+              smoothedPosition.lerp(tempPos, 0.3);
+              smoothedQuaternion.slerp(tempFlatQ, 0.3);
             }
 
-            /* =========================================
-               STABILITY CHECK
-            ========================================= */
-
-            reticle.position.copy(
-              smoothedPosition
-            );
-
-            reticle.quaternion.copy(
-              smoothedQuaternion
-            );
-
+            reticle.position.copy(smoothedPosition);
+            reticle.quaternion.copy(smoothedQuaternion);
             reticle.visible = true;
 
-            /* =========================================
-               RETICLE PULSE
-            ========================================= */
-
-            reticle.material.opacity =
-              0.55 +
-              Math.sin(time * 0.005) * 0.2;
+            // Pulse opacity
+            reticle.material.opacity = 0.55 + Math.sin(time * 0.005) * 0.2;
 
             placeBtn.classList.add("ready");
-            hint.innerHTML = "Surface found • Tap Place";
+            hint.innerHTML = "Surface found • Tap to place";
           }
 
         } else {
 
           reticle.visible = false;
-
-          stableFrames = 0;
-
+          latestHit = null;
           placeBtn.classList.remove("ready");
-
-          hint.innerHTML =
-            "Move phone slowly...";
+          hint.innerHTML = "Move phone slowly to detect surface...";
         }
       }
 
@@ -1054,39 +1227,33 @@
        PLACE MODEL
     ========================================================= */
 
-    async function placeModel() {
+    function placeModel() {
 
-      if (!latestHit || !reticle.visible) return;
+      // Only place if we have a valid surface hit and reticle is visible
+      if (!latestHit || !reticle || !reticle.visible) return;
+      if (placed) return; // prevent double-placement
 
-      placementRoot.position.copy(
-        reticle.position
-      );
-
-      placementRoot.quaternion.copy(
-        reticle.quaternion
-      );
+      // Snap placementRoot to the exact smoothed reticle world position
+      placementRoot.position.copy(smoothedPosition);
+      placementRoot.quaternion.copy(smoothedQuaternion);
 
       modelGroup.visible = true;
-
       shadowPlane.visible = true;
-
       placed = true;
 
       controls.classList.add("visible");
-
       placeBtn.classList.remove("ready");
-
-      hint.innerHTML =
-        "Dish placed 🎉";
+      hint.innerHTML = "Dish placed 🎉 Drag to move • Pinch to resize";
 
       reticle.visible = false;
 
+      // Cancel hit-testing immediately — model is now frozen in world space
       if (hitTestSource) {
-
         hitTestSource.cancel();
-
         hitTestSource = null;
       }
+
+      latestHit = null;
     }
 
     /* =========================================================
@@ -1099,7 +1266,7 @@
 
       userScale = Math.max(
         0.3,
-        Math.min(userScale, 4)
+        Math.min(userScale, 3)
       );
 
       modelGroup.scale.setScalar(userScale);
@@ -1136,10 +1303,15 @@
       xrSession = null;
       hitTestSource = null;
       placed = false;
+      latestHit = null;
       stableFrames = 0;
       reticleInitialized = false;
       controls.classList.remove("visible");
       hint.innerHTML = "Move phone slowly to detect surface...";
+
+      overlay.removeEventListener("touchstart", onTouchStart);
+      overlay.removeEventListener("touchmove", onTouchMove);
+      overlay.removeEventListener("touchend", onTouchEnd);
     }
 
     /* =========================================================
@@ -1205,7 +1377,7 @@
         const dist = getPinchDist(e);
         const scaleMult = dist / initialPinchDist;
         userScale = initialUserScale * scaleMult;
-        userScale = Math.max(0.3, Math.min(userScale, 4));
+        userScale = Math.max(0.3, Math.min(userScale, 3));
         modelGroup.scale.setScalar(userScale);
       }
     }
